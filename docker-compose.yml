@@ -1,0 +1,152 @@
+services:
+  db:
+    image: mysql:8.0
+    env_file: .env
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DEFAULT_AUTH_PLUGIN: mysql_native_password
+    command: --default-authentication-plugin=mysql_native_password
+    volumes:
+      - mysql-data:/var/lib/mysql
+    ports:
+      - "${HOST_DB_PORT}:${DB_INTERNAL_PORT}"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-u", "${DB_USER}", "-p${DB_PASSWORD}", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file: .env
+    command: >
+      sh -c "
+        echo 'Waiting for database...' &&
+        until nc -z db ${DB_INTERNAL_PORT}; do
+          echo 'Database not ready, waiting...';
+          sleep 2;
+        done &&
+        echo 'Starting FastAPI...' &&
+        uvicorn astro_images.app.main:app --host 0.0.0.0 --port 8000 --reload --log-level info
+      "
+    environment:
+      - SERVICE=web
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      - DB_HOST=db
+      - DB_PORT=${DB_INTERNAL_PORT}
+      - JWT_SECRET=${JWT_SECRET}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - "${LOCAL_IMAGE_PATH}:/data/images:ro"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  ingestion:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file: .env
+    command: >
+      sh -c "
+        echo 'Starting ingestion service...' &&
+        sleep 30 &&
+        python -m astro_images.app.ingestion &&
+        echo 'Ingestion completed!'
+      "
+    environment:
+      - SERVICE=ingestion
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      - DB_HOST=db
+      - DB_PORT=${DB_INTERNAL_PORT}
+      - JWT_SECRET=${JWT_SECRET}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - PYTHONUNBUFFERED=1
+      - API_URL=http://web:8000/images
+    depends_on:
+      web:
+        condition: service_healthy
+    volumes:
+      - "${LOCAL_IMAGE_PATH}:/data/images:ro"
+    restart: "no"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      web:
+        condition: service_healthy
+    restart: unless-stopped
+
+  file-watcher:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file: .env
+    command: >
+      sh -c "
+        echo 'Starting file watcher...' &&
+        sleep 45 &&
+        python -m astro_images.app.file_watcher
+      "
+    environment:
+      - SERVICE=file-watcher
+      - WATCH_DIR=/data/images
+      - SCAN_INTERVAL=5
+      - API_URL=http://web:8000/images
+      - PYTHONUNBUFFERED=1
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      - DB_HOST=db
+      - DB_PORT=${DB_INTERNAL_PORT}
+      - JWT_SECRET=${JWT_SECRET}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+    depends_on:
+      web:
+        condition: service_healthy
+    volumes:
+      - "${LOCAL_IMAGE_PATH}:/data/images:ro"
+      - watcher_data:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "ps aux | grep '[f]ile_watcher' || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+volumes:
+  mysql-data:
+    driver: local
+  watcher_data:
+    driver: local

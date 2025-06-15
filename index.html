@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Planet of API's</title>
+
+  <link rel="stylesheet" href="styles.css" />
+
+  <!-- Load Google Identity Services -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+  <!-- Header with logo, nav, and auth buttons -->
+  <header>
+    <div id="logo">🌍 Planet of API's</div>
+    <nav>
+      <ul>
+        <li><a href="#" data-page="home" class="active">Home</a></li>
+        <li><a href="#" data-page="about">About us</a></li>
+        <li><a href="#" data-page="docs">Query</a></li>
+      </ul>
+    </nav>
+
+    <!-- Auth Buttons -->
+    <div id="authButtons">
+      <!-- Google Sign-In button -->
+      <div id="loginButton"
+           class="g_id_signin"
+           data-type="standard"
+           data-size="small"
+           data-theme="outline"
+           data-text="sign_in_with"
+           data-shape="rectangular"
+           data-logo_alignment="left"
+           data-width="200">
+      </div>
+      <!-- Logout button, hidden by default -->
+      <button id="logoutButton" style="display:none;">Logout</button>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="hero-overlay"></div>
+    <div class="hero-content">
+      <h1>Welcome to Planet of API's</h1>
+      <p>Gateway to a Universe of Integration</p>
+    </div>
+  </section>
+
+  <!-- Main content updated via app.js -->
+  <main id="content"></main>
+
+  <!-- Footer -->
+  <footer>
+    <p>&copy; <span id="year"></span> Planet of API's. All rights reserved.</p>
+  </footer>
+
+  <!-- JSZip library from CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.0/jszip.min.js"></script>
+  
+  <script src="app.js"></script>
+
+  <script>
+    // Set current year in footer
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById("year").textContent = new Date().getFullYear();
+    });
+  </script>
+</body>
+</html>
